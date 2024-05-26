@@ -81,7 +81,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt -y install build-essential p7zip xz-utils wget libglib2.0-0
-          sudo apt -y install python3-gi libgirepository1.0-dev  # should pull dependencies for gi installation below
+          sudo apt -y install python3-gi libgirepository1.0-dev gir1.2-atk-1.0  # should pull dependencies for gi installation below
       - name: Get a recent python
         uses: actions/setup-python@v5
         with:
