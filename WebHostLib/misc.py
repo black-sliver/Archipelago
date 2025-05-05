@@ -28,26 +28,46 @@ def get_visible_worlds() -> dict[str, type(World)]:
 
 
 def render_markdown(path: str) -> str:
-    import markdown
+    import mistune
+    from collections import Counter
+
+    markdown = mistune.create_markdown(
+        escape=False,
+        plugins=[
+            "strikethrough",
+            "footnotes",
+            "table",
+            "speedup",
+        ],
+    )
+
+    heading_id_count: Counter[str] = Counter()
+
+    def heading_id(text: str) -> str:
+        nonlocal heading_id_count
+        import re  # there is no good way to do this without regex
+
+        s = re.sub(r"[^\w\- ]", "", text.lower()).replace(" ", "-").strip("-")
+        n = heading_id_count[s]
+        heading_id_count[s] += 1
+        if n > 0:
+            s += f"-{n}"
+        return s
+
+    def id_hook(_: mistune.Markdown, state: mistune.BlockState) -> None:
+        for tok in state.tokens:
+            if tok["type"] == "heading" and tok["attrs"]["level"] < 4:
+                text = tok["text"]
+                assert isinstance(text, str)
+                unique_id = heading_id(text)
+                tok["attrs"]["id"] = unique_id
+                tok["text"] = f"{text}"  #f"<a href=\"#{unique_id}\">{text}</a>"
+
+    markdown.before_render_hooks.append(id_hook)
 
     with open(path, encoding="utf-8-sig") as f:
         document = f.read()
-    return markdown.markdown(
-        document,
-        extensions=[
-            "mdx_breakless_lists",
-            "markdown.extensions.fenced_code",
-            "markdown.extensions.smarty",
-            "toc",
-        ],
-        extension_configs={
-            "toc": {
-                "anchorlink": True,
-                # documentation says setting this to an empty string speeds up parsing if no marker present
-                "marker": "",
-            },
-        }
-    )
+    return markdown(document)
 
 
 @app.errorhandler(404)
