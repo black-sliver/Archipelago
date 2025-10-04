@@ -97,6 +97,7 @@ class WebHostContext(Context):
                         self.main_loop.call_soon_threadsafe(cmdprocessor, command.commandtext)
                         command.delete()
                     commit()
+            del commands
             time.sleep(5)
 
     @db_session
@@ -146,13 +147,13 @@ class WebHostContext(Context):
             self.location_name_groups = static_location_name_groups
         return self._load(multidata, game_data_packages, True)
 
-    @db_session
     def init_save(self, enabled: bool = True):
         self.saving = enabled
         if self.saving:
-            savegame_data = Room.get(id=self.room_id).multisave
-            if savegame_data:
-                self.set_save(restricted_loads(Room.get(id=self.room_id).multisave))
+            with db_session:
+                savegame_data = Room.get(id=self.room_id).multisave
+                if savegame_data:
+                    self.set_save(restricted_loads(Room.get(id=self.room_id).multisave))
             self._start_async_saving(atexit_save=False)
         threading.Thread(target=self.listen_to_db_commands, daemon=True).start()
 
@@ -304,6 +305,7 @@ def run_server_process(name: str, ponyconfig: dict, static_server_data: dict,
                     with db_session:
                         room = Room.get(id=ctx.room_id)
                         room.last_port = port
+                    del room
                 else:
                     ctx.logger.exception("Could not determine port. Likely hosting failure.")
                 with db_session:
