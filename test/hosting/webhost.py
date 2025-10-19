@@ -199,12 +199,26 @@ def stop_autohost(graceful: bool = True) -> None:
     stop()
     proc: multiprocessing.process.BaseProcess
     for proc in filter(lambda child: child.name.startswith("MultiHoster"), multiprocessing.active_children()):
+        if proc.pid == os.getpid():
+            print(f"Unexpected process matched by name: {proc}")
+            continue
         if graceful and proc.pid:
             os.kill(proc.pid, getattr(signal, "CTRL_C_EVENT", signal.SIGINT))
         else:
             proc.kill()
         try:
-            proc.join(30)
+            try:
+                proc.join(30)
+            except TimeoutError:
+                raise
+            except BaseException as e:
+                # on Windows, the MP exception may be forwarded to the host, so ignore once and retry
+                if not isinstance(e, KeyboardInterrupt):
+                    print(f"Unexpected exception during stop_autohost: {e}")
+                proc.join(30)
         except TimeoutError:
             proc.kill()
             proc.join()
+        except BaseException as e:
+            print(f"Unexpected exception during stop_autohost: {e}")
+            raise

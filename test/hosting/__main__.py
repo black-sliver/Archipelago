@@ -2,11 +2,14 @@
 # This spawns processes and may modify your local AP, so this is not run as part of unit testing.
 # Run with `python test/hosting` instead,
 import logging
+import os
+import sys
 import traceback
 from tempfile import TemporaryDirectory
 from time import sleep
 from typing import Any
 
+from Utils import is_windows
 from test.hosting.client import Client
 from test.hosting.generate import generate_local
 from test.hosting.serve import ServeGame, LocalServeGame, WebHostServeGame
@@ -55,7 +58,7 @@ else:
             logging.error(f"Expectation failed {first} == {second}{msg}\n{tb}")
 
 
-if __name__ == "__main__":
+def main():
     import warnings
     warnings.simplefilter("ignore", ResourceWarning)
     warnings.simplefilter("ignore", UserWarning)
@@ -121,6 +124,7 @@ if __name__ == "__main__":
                     print(f"\nTesting [{n}] {game} in {multidata} on customserver with {collected_items} items collected")
                     prev_host_adr: str
                     with WebHostServeGame(webhost_client, room) as host:
+                        sleep(.1)  # wait for the server to fully start before doing anything
                         prev_host_adr = host.address
                         with Client(host.address, game, "Player1") as client:
                             web_data_packages = client.games_packages
@@ -134,6 +138,7 @@ if __name__ == "__main__":
                                 autohost(webapp.config)  # this will spin the room right up again
                                 sleep(1)  # make log less annoying
                                 # if saving failed, the next iteration will fail below
+                        sleep(2)  # work around issue #5571
 
                     # verify server shut down
                     try:
@@ -163,29 +168,68 @@ if __name__ == "__main__":
             sleep(5.5)  # make sure all tasks actually stopped
 
             # raise an exception in customserver and verify the save doesn't get destroyed
-            # local variables room is the last room's id here
-            old_data = get_multidata_for_room(webhost_client, room)
+            # local variable room is the last room's id here
             print(f"Destroying multidata for {room}")
+            # Stop autohost to make sure file is not in use while fiddling with multidata
+            stop_autohost()
+            sleep(3)
+            old_data = get_multidata_for_room(webhost_client, room)
             set_multidata_for_room(webhost_client, room, bytes([0]))
+            autohost(webapp.config)
+            sleep(1)
+
             try:
                 start_room(webhost_client, room, timeout=7)
             except TimeoutError:
                 pass
             else:
                 assert_true(False, "Room started with destroyed multidata")
+
             print(f"Restoring multidata for {room}")
+            # Stop autohost to make sure file is not in use while fiddling with multidata
+            stop_autohost()
+            sleep(3)
             set_multidata_for_room(webhost_client, room, old_data)
+            autohost(webapp.config)
+            sleep(1)
+
             with WebHostServeGame(webhost_client, room) as host:
+                sleep(.1)  # wait for the server to fully start before doing anything
                 with Client(host.address, game, "Player1") as client:
                     assert_equal(len(client.checked_locations), 2,
                                  "Save was destroyed during exception in customserver")
-                    print("Save file is not busted 🥳")
+                    party = ":party:" if is_windows else "🥳"
+                    print(f"Save file is not busted {party}")
+                sleep(2)  # work around issue #5571
 
         finally:
+            warnings.resetwarnings()
             print("Stopping autohost")
-            stop_autohost(False)
+            try:
+                sleep(5)  # wait for 1 commands poll interval
+                stop_autohost()
+                sleep(5)  # give processes some time to stop before attempting to delete temp dir
+            except BaseException as e:  # noqa
+                print(f"Error shutting down: {e}")  # nothing we can do
+            exc = sys.exc_info()[1]
+            if exc:
+                print(f"Test ended with active exception: {exc}")
 
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BaseException as e:
+        if isinstance(e, PermissionError) and "host.db" in str(e):
+            warnings.warn(f"Could not delete temp dir: {e}")
+        else:
+            print(f"Failed to run tests: {e}")
+            traceback.print_exception(e)
+            raise
     if failure:
         print("Some tests failed")
         exit(1)
+    print("All tests passed")
+    if is_windows:
+        os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
