@@ -59,10 +59,6 @@ else:
 
 
 def main():
-    import warnings
-    warnings.simplefilter("ignore", ResourceWarning)
-    warnings.simplefilter("ignore", UserWarning)
-
     spacer = '=' * 80
 
     with TemporaryDirectory() as tempdir:
@@ -203,7 +199,6 @@ def main():
                 sleep(2)  # work around issue #5571
 
         finally:
-            warnings.resetwarnings()
             print("Stopping autohost")
             try:
                 sleep(5)  # wait for 1 commands poll interval
@@ -217,9 +212,16 @@ def main():
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.simplefilter("ignore", ResourceWarning)
+    warnings.simplefilter("ignore", UserWarning)
+    warnings.simplefilter("ignore", DeprecationWarning)
+
     try:
         main()
     except BaseException as e:
+        warnings.resetwarnings()
         if isinstance(e, PermissionError) and "host.db" in str(e):
             warnings.warn(f"Could not delete temp dir: {e}")
         else:
