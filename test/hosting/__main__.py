@@ -209,10 +209,10 @@ def main():
                 stop_autohost()
                 sleep(5)  # give processes some time to stop before attempting to delete temp dir
             except BaseException as e:  # noqa
-                print(f"Error shutting down: {e}")  # nothing we can do
+                print(f"Error shutting down: {e}", file=sys.stderr)  # nothing we can do
             exc = sys.exc_info()[1]
             if exc:
-                print(f"Test ended with active exception: {exc}")
+                print(f"Test ended with active exception: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -229,11 +229,11 @@ if __name__ == "__main__":
         if isinstance(e, PermissionError) and "host.db" in str(e):
             warnings.warn(f"Could not delete temp dir: {e}")
         else:
-            print(f"Failed to run tests: {e}")
+            print(f"Failed to run tests: {e}", file=sys.stderr)
             traceback.print_exception(e)
             raise
     if failure:
-        print("Some tests failed")
+        print("Some tests failed", file=sys.stderr)
         exit(1)
 
     print("All tests passed")
@@ -241,8 +241,10 @@ if __name__ == "__main__":
         import atexit
         import multiprocessing
 
-        print(f"Skipping {atexit._ncallbacks()} atexit hooks")
-        atexit._clear()
-        print(f"{multiprocessing.active_children()} active MP children at exit")
+        if atexit._ncallbacks():
+            print(f"Skipping {atexit._ncallbacks()} atexit hooks", file=sys.stderr)
+            atexit._clear()
+        if multiprocessing.active_children():
+            print(f"{multiprocessing.active_children()} active MP children at exit", file=sys.stderr)
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
