@@ -256,5 +256,7 @@ if __name__ == "__main__":
         if len(threads) > 1:
             print(f"{threads} active at exit", file=sys.stderr)
 
+        from ctypes import windll
+        windll.kernel32.ExitProcess(0)
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
