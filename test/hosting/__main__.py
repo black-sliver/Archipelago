@@ -3,6 +3,7 @@
 # Run with `python test/hosting` instead,
 import gc
 import logging
+import multiprocessing
 import os
 import sys
 import traceback
@@ -210,6 +211,14 @@ def main():
                 sleep(5)  # give processes some time to stop before attempting to delete temp dir
             except BaseException as e:  # noqa
                 print(f"Error shutting down: {e}", file=sys.stderr)  # nothing we can do
+            if multiprocessing.active_children():
+                print(f"Stopping {len(multiprocessing.active_children())} MP children", file=sys.stderr)
+                for child in multiprocessing.active_children():
+                    try:
+                        child.kill()
+                        child.join(30)
+                    except Exception as e2:
+                        print(f"Error killing MP child: {e2}", file=sys.stderr)  # nothing we can do
             exc = sys.exc_info()[1]
             if exc:
                 print(f"Test ended with active exception: {exc}", file=sys.stderr)
@@ -239,12 +248,10 @@ if __name__ == "__main__":
     print("All tests passed")
     if is_windows:
         import atexit
-        import multiprocessing
 
         if atexit._ncallbacks():
             print(f"Skipping {atexit._ncallbacks()} atexit hooks", file=sys.stderr)
             atexit._clear()
-        if multiprocessing.active_children():
-            print(f"{multiprocessing.active_children()} active MP children at exit", file=sys.stderr)
+
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
