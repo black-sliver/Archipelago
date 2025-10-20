@@ -235,7 +235,14 @@ if __name__ == "__main__":
     if failure:
         print("Some tests failed")
         exit(1)
+
     print("All tests passed")
     if is_windows:
+        import atexit
+        import multiprocessing
+
+        print(f"Skipping {atexit._ncallbacks()} atexit hooks")
+        atexit._clear()
+        print(f"{multiprocessing.active_children()} active MP children at exit")
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
