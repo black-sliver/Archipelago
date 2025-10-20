@@ -61,8 +61,6 @@ else:
 
 
 def main():
-    spacer = '=' * 80
-
     with TemporaryDirectory() as tempdir:
         multis = [["VVVVVV"], ["Temp World"], ["VVVVVV", "Temp World"]]
         p1_games = []
@@ -140,7 +138,7 @@ def main():
 
                     # verify server shut down
                     try:
-                        with Client(prev_host_adr, game, "Player1") as client:
+                        with Client(prev_host_adr, game, "Player1"):
                             assert_true(False, "Server did not shut down")
                     except ConnectionError:
                         pass
