@@ -1,6 +1,7 @@
 # A bunch of tests to verify MultiServer and custom webhost server work as expected.
 # This spawns processes and may modify your local AP, so this is not run as part of unit testing.
 # Run with `python test/hosting` instead,
+import gc
 import logging
 import os
 import sys
@@ -188,6 +189,9 @@ def main():
             set_multidata_for_room(webhost_client, room, old_data)
             autohost(webapp.config)
             sleep(1)
+
+            del webapp
+            gc.collect()
 
             with WebHostServeGame(webhost_client, room) as host:
                 sleep(.1)  # wait for the server to fully start before doing anything
