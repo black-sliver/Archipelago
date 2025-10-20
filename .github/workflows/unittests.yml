@@ -92,3 +92,9 @@ jobs:
       timeout-minutes: 10
       run: |
         python -m test.hosting
+    - name: Upload Logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: hosting-logs_${{ matrix.os }}
+        path: logs
