@@ -246,10 +246,15 @@ if __name__ == "__main__":
     print("All tests passed")
     if is_windows:
         import atexit
+        import threading
 
         if atexit._ncallbacks():
             print(f"Skipping {atexit._ncallbacks()} atexit hooks", file=sys.stderr)
             atexit._clear()
+
+        threads = list(threading.enumerate())
+        if len(threads) > 1:
+            print(f"{threads} active at exit", file=sys.stderr)
 
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
