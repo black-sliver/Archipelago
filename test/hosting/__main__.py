@@ -235,9 +235,10 @@ if __name__ == "__main__":
         warnings.resetwarnings()
         if isinstance(e, PermissionError) and "host.db" in str(e):
             warnings.warn(f"Could not delete temp dir: {e}")
+            traceback.print_exception(e, file=sys.stderr)
         else:
             print(f"Failed to run tests: {e}", file=sys.stderr)
-            traceback.print_exception(e)
+            traceback.print_exception(e, file=sys.stderr)
             raise
     if failure:
         print("Some tests failed", file=sys.stderr)
@@ -252,11 +253,11 @@ if __name__ == "__main__":
             print(f"Skipping {atexit._ncallbacks()} atexit hooks", file=sys.stderr)
             atexit._clear()
 
-        threads = list(threading.enumerate())
-        if len(threads) > 1:
-            print(f"{threads} active at exit", file=sys.stderr)
+        threads = threading.enumerate()
+        print(f"{threads} active at exit", file=sys.stderr)
 
         from ctypes import windll
+        print(f"{windll.kernel32.ExitProcess}", file=sys.stderr)
         windll.kernel32.ExitProcess(0)
         os._exit(0)  # The logic to set the exit code on Windows does not work for us.
     exit(0)
