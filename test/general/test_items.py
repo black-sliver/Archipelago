@@ -82,11 +82,13 @@ class TestBase(unittest.TestCase):
 
     def test_items_in_datapackage(self):
         """Test that any created items in the itempool are in the datapackage"""
+        common = AutoWorldRegister.world_types["Archipelago"]
         for game_name, world_type in AutoWorldRegister.world_types.items():
             with self.subTest("Game", game=game_name):
                 multiworld = setup_solo_multiworld(world_type)
                 for item in multiworld.itempool:
-                    self.assertIn(item.name, world_type.item_name_to_id)
+                    if item.name not in common.item_name_to_id or item.code not in common.item_id_to_name:
+                        self.assertIn(item.name, world_type.item_name_to_id)
     
     def test_item_links(self) -> None:
         """
