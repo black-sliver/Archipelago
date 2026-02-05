@@ -6,6 +6,7 @@ if __name__ == "__main__":
 
 from kvui import (ThemedApp, ScrollBox, MainLayout, ContainerLayout, dp, Widget, MDBoxLayout, TooltipLabel, MDLabel,
                   ToggleButton, MarkupDropdown, ResizableTextField)
+from kivy.clock import Clock
 from kivy.uix.behaviors.button import ButtonBehavior
 from kivymd.uix.behaviors import RotateBehavior
 from kivymd.uix.anchorlayout import MDAnchorLayout
@@ -27,10 +28,13 @@ import typing
 import webbrowser
 import re
 from urllib.parse import urlparse
-from worlds.AutoWorld import AutoWorldRegister, World
 from Options import (Option, Toggle, TextChoice, Choice, FreeText, NamedRange, Range, OptionSet, OptionList, Removed,
                      OptionCounter, Visibility)
 
+if typing.TYPE_CHECKING:
+    from worlds.AutoWorld import World
+
+from datetime import datetime
 
 def validate_url(x):
     try:
@@ -72,7 +76,7 @@ class TrailingPressedIconButton(ButtonBehavior, RotateBehavior, MDListItemTraili
 
 
 class WorldButton(ToggleButton):
-    world_cls: typing.Type[World]
+    world_cls: typing.Type["World"]
 
 
 class VisualRange(MDBoxLayout):
@@ -422,7 +426,7 @@ class OptionsCreator(ThemedApp):
         return checkbox
 
     def create_popup(self, option: typing.Type[OptionList] | typing.Type[OptionSet] | typing.Type[OptionCounter],
-                     name: str, world: typing.Type[World]):
+                     name: str, world: typing.Type["World"]):
 
         valid_keys = sorted(option.valid_keys)
         if option.verify_item_name:
@@ -469,11 +473,11 @@ class OptionsCreator(ThemedApp):
         dialog.open()
 
     def create_option_set_list_counter(self, option: typing.Type[OptionList] | typing.Type[OptionSet] |
-                                       typing.Type[OptionCounter], name: str, world: typing.Type[World]):
+                                       typing.Type[OptionCounter], name: str, world: typing.Type["World"]):
         main_button = MDButton(MDButtonText(text="Edit"), on_release=lambda x: self.create_popup(option, name, world))
         return main_button
 
-    def create_option(self, option: typing.Type[Option], name: str, world: typing.Type[World]) -> Widget:
+    def create_option(self, option: typing.Type[Option], name: str, world: typing.Type["World"]) -> Widget:
         option_base = MDBoxLayout(orientation="vertical", size_hint_y=None, padding=[0, 0, dp(5), dp(5)])
 
         tooltip = filter_tooltip(option.__doc__)
@@ -533,7 +537,7 @@ class OptionsCreator(ThemedApp):
     def create_options_panel(self, world_button: WorldButton):
         self.option_layout.clear_widgets()
         self.options.clear()
-        cls: typing.Type[World] = world_button.world_cls
+        cls: typing.Type["World"] = world_button.world_cls
 
         self.current_game = cls.game
         if not cls.web.options_page:
@@ -599,7 +603,8 @@ class OptionsCreator(ThemedApp):
                 group_box.layout.orientation = "vertical"
                 group_box.layout.spacing = dp(3)
                 for name, option in options:
-                    group_content.add_widget(self.create_option(option, name, cls))
+                    opt = self.create_option(option, name, cls)
+                    group_content.add_widget(opt)
                 expansion_box.layout.add_widget(group_item)
             self.option_layout.add_widget(expansion_box)
         self.game_label.text = f"Game: {self.current_game}"
@@ -623,30 +628,6 @@ class OptionsCreator(ThemedApp):
         self.main_layout = self.container.ids.main
         self.scrollbox = self.container.ids.scrollbox
 
-        def world_button_action(world_btn: WorldButton):
-            if self.current_game != world_btn.world_cls.game:
-                old_button = next((button for button in self.scrollbox.layout.children
-                                   if button.world_cls.game == self.current_game), None)
-                if old_button:
-                    old_button.state = "normal"
-            else:
-                world_btn.state = "down"
-            self.create_options_panel(world_btn)
-
-        for world, cls in sorted(AutoWorldRegister.world_types.items(), key=lambda x: x[0]):
-            if cls.hidden:
-                continue
-            world_text = MDButtonText(text=world, size_hint_y=None, width=dp(150),
-                                      pos_hint={"x": 0.03, "center_y": 0.5})
-            world_text.text_size = (world_text.width, None)
-            world_text.bind(width=lambda *x, text=world_text: text.setter('text_size')(text, (text.width, None)),
-                            texture_size=lambda *x, text=world_text: text.setter("height")(text,
-                                                                                           world_text.texture_size[1]))
-            world_button = WorldButton(world_text, size_hint_x=None, width=dp(150), theme_width="Custom",
-                                       radius=(dp(5), dp(5), dp(5), dp(5)))
-            world_button.bind(on_release=world_button_action)
-            world_button.world_cls = cls
-            self.scrollbox.layout.add_widget(world_button)
         self.main_panel = self.container.ids.player_layout
         self.player_options = self.container.ids.player_options
         self.game_label = self.container.ids.game
@@ -665,6 +646,75 @@ class OptionsCreator(ThemedApp):
         # create_console(Window, self.container)
 
         return self.container
+
+    def _fill_worlds(self) -> None:
+        # TODO: switch to RecycleView
+        # TODO: individual lazy world loading and keep a list of worlds that are supposed to exist
+
+        from worlds.AutoWorld import AutoWorldRegister
+
+        def world_button_action(world_btn: WorldButton):
+            if self.current_game != world_btn.world_cls.game:
+                old_button = next((button for button in self.scrollbox.layout.children
+                                   if button.world_cls.game == self.current_game), None)
+                if old_button:
+                    old_button.state = "normal"
+            else:
+                world_btn.state = "down"
+            self.create_options_panel(world_btn)
+
+        # we create buttons in steps of 20 to not block the UI for too long
+        world_button_queue: list[tuple[str, type["World"]]] = []
+
+        for world, cls in sorted(AutoWorldRegister.world_types.items(), key=lambda x: x[0]):
+            if cls.hidden:
+                continue
+            world_button_queue.append((world, cls))
+
+        def create_button(world, cls):
+            world_text = MDButtonText(
+                text=world,
+                size_hint_y=None,
+                width=dp(150),
+                pos_hint={"x": 0.03, "center_y": 0.5},
+            )
+            world_text.text_size = (world_text.width, None)
+            world_text.bind(
+                width=lambda *x, text=world_text: text.setter('text_size')(text, (text.width, None)),
+                texture_size=lambda *x, text=world_text: text.setter("height")(text, world_text.texture_size[1]),
+            )
+            world_button = WorldButton(
+                world_text,
+                size_hint_x=None,
+                width=dp(150),
+                theme_width="Custom",
+                radius=(dp(5), dp(5), dp(5), dp(5)),
+            )
+            world_button.bind(on_release=world_button_action)
+            world_button.world_cls = cls
+            self.scrollbox.layout.add_widget(world_button)
+
+        def create_buttons(_: typing.Any = None) -> None:
+            for _ in range(4):
+                world, cls = world_button_queue.pop()
+                create_button(world, cls)
+                if not world_button_queue:
+                    break
+            if world_button_queue:
+                Clock.schedule_once(create_buttons, 0)
+
+        world_button_queue.reverse()
+        Clock.schedule_once(create_buttons, 0)
+
+    def on_start(self):
+        super().on_start()
+        # TODO: show spinner
+        # start creating world buttons after the frame was rendered
+        from threading import Thread
+        Clock.schedule_once(lambda _: Thread(target=self._fill_worlds).start(), 0)
+
+    def run(self):
+        super().run()
 
 
 def launch():
