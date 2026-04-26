@@ -211,7 +211,10 @@ def launch(exe: Sequence[str], in_terminal: bool = False) -> bool:
             if terminal:
                 # Clear LD_LIB_PATH during terminal startup, but set it again when running command in case it's needed
                 ld_lib_path = os.environ.get("LD_LIBRARY_PATH")
-                lib_path_setter = f"env LD_LIBRARY_PATH={shlex.quote(ld_lib_path)} " if ld_lib_path else ""
+                env_path = which("env")
+                lib_path_setter = (
+                    f"{env_path} LD_LIBRARY_PATH={shlex.quote(ld_lib_path)} " if ld_lib_path and env_path else ""
+                )
                 env = env_cleared_lib_path()
 
                 subprocess.Popen([terminal, "-e", lib_path_setter + shlex.join(exe)], env=env)
